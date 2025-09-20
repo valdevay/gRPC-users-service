@@ -1,45 +1,80 @@
 package user
 
 import (
-	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"errors"
 )
 
 type Service struct {
-	repo UserRepository
+	repo *Repository
 }
 
-func NewService(repo UserRepository) *Service {
+func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) GetAllUsers(ctx context.Context, limit, offset int) ([]User, error) {
-	return s.repo.GetAllUsers(ctx, limit, offset)
+func (s *Service) CreateUser(email, password string) (*User, error) {
+	// Проверяем, существует ли пользователь с таким email
+	existingUser, _ := s.repo.GetUserByEmail(email)
+	if existingUser != nil {
+		return nil, errors.New("user with this email already exists")
+	}
+
+	user := &User{
+		Email:    email,
+		Password: password, // В реальном проекте здесь должно быть хеширование пароля
+	}
+
+	if err := s.repo.CreateUser(user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
-func (s *Service) CreateUser(ctx context.Context, user User) (User, error) {
-	// Генерируем уникальный ID
-	user.ID = generateID()
-	return s.repo.CreateUser(ctx, user)
+func (s *Service) GetUserByID(id uint) (*User, error) {
+	return s.repo.GetUserByID(id)
 }
 
-func (s *Service) UpdateUserByID(ctx context.Context, id string, user User) (User, error) {
-	user.ID = id // Убеждаемся, что ID не изменится
-	return s.repo.UpdateUserByID(ctx, id, user)
+func (s *Service) GetUserByEmail(email string) (*User, error) {
+	return s.repo.GetUserByEmail(email)
 }
 
-func (s *Service) DeleteUserByID(ctx context.Context, id string) error {
-	return s.repo.DeleteUserByID(ctx, id)
+func (s *Service) GetAllUsers() ([]User, error) {
+	return s.repo.GetAllUsers()
 }
 
-func (s *Service) GetUserByID(ctx context.Context, id string) (User, error) {
-	return s.repo.GetUserByID(ctx, id)
+func (s *Service) UpdateUser(id uint, email, password string) (*User, error) {
+	user, err := s.repo.GetUserByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Проверяем, не занят ли новый email другим пользователем
+	if email != user.Email {
+		existingUser, _ := s.repo.GetUserByEmail(email)
+		if existingUser != nil {
+			return nil, errors.New("user with this email already exists")
+		}
+	}
+
+	user.Email = email
+	if password != "" {
+		user.Password = password // В реальном проекте здесь должно быть хеширование пароля
+	}
+
+	if err := s.repo.UpdateUser(user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
-// generateID генерирует случайный ID для пользователя
-func generateID() string {
-	bytes := make([]byte, 16)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+func (s *Service) DeleteUser(id uint) error {
+	// Проверяем, существует ли пользователь
+	_, err := s.repo.GetUserByID(id)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.DeleteUser(id)
 }

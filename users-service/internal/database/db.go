@@ -1,72 +1,65 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
-	"time"
 
-	"github.com/joho/godotenv"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	_ "github.com/lib/pq"
 )
 
-var DB *gorm.DB
+var DB *sql.DB
 
 func InitDB() {
-	// Загружаем переменные окружения из файла config.env
-	if err := godotenv.Load("../config.env"); err != nil {
-		log.Println("Warning: config.env file not found, using environment variables")
-	}
-
-	// Получаем значения из переменных окружения
+	// Получаем переменные окружения для подключения к БД
 	host := getEnv("DB_HOST", "localhost")
 	port := getEnv("DB_PORT", "5432")
 	user := getEnv("DB_USER", "postgres")
-	password := getEnv("DB_PASSWORD", "postgres123")
-	dbname := getEnv("DB_NAME", "users_db")
-	sslmode := getEnv("DB_SSLMODE", "disable")
+	password := getEnv("DB_PASSWORD", "password")
+	dbname := getEnv("DB_NAME", "users")
 
 	// Формируем строку подключения
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
-		host, user, password, dbname, port, sslmode)
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
 
+	// Подключаемся к базе данных
 	var err error
-	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	DB, err = sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatalf("Could not connect to database: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	log.Println("Database connected successfully")
-	
-	// Выполняем автоматические миграции
-	if err := runMigrations(); err != nil {
-		log.Fatalf("Could not run migrations: %v", err)
+	// Проверяем подключение
+	if err = DB.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
 	}
+
+	// Создаем таблицу пользователей
+	createTableSQL := `
+	CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		email VARCHAR(255) UNIQUE NOT NULL,
+		password VARCHAR(255) NOT NULL,
+		created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()),
+		updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())
+	);`
+
+	_, err = DB.Exec(createTableSQL)
+	if err != nil {
+		log.Fatalf("Failed to create table: %v", err)
+	}
+
+	log.Println("Database initialized successfully")
 }
 
-// runMigrations выполняет автоматические миграции
-func runMigrations() error {
-	// Импортируем модель User
-	// В реальном проекте лучше вынести это в отдельный пакет
-	
-	// Создаем таблицу users если её нет
-	if err := DB.AutoMigrate(&User{}); err != nil {
-		return fmt.Errorf("failed to migrate User model: %w", err)
-	}
-	
-	log.Println("Migrations completed successfully")
-	return nil
-}
-
-// User модель для миграций (временно здесь, лучше вынести в отдельный пакет)
+// User represents a user in the system
 type User struct {
-	ID        string     `gorm:"primaryKey"`
-	Email     string     `gorm:"uniqueIndex;not null"`
-	Password  string     `gorm:"not null"`
-	CreatedAt time.Time  `gorm:"not null;default:CURRENT_TIMESTAMP"`
-	UpdatedAt time.Time  `gorm:"not null;default:CURRENT_TIMESTAMP"`
-	DeletedAt *time.Time `gorm:"index"`
+	ID        uint   `json:"id"`
+	Email     string `json:"email"`
+	Password  string `json:"-"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 // getEnv получает переменную окружения или возвращает значение по умолчанию

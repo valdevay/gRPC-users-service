@@ -4,53 +4,38 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
-	userpb "github.com/valdevay/project-protos/proto/users"
+	userpb "github.com/valdevay/project-protos/proto/user"
 	"github.com/valdevay/users-service/internal/user"
+	"google.golang.org/grpc"
 )
 
-// RunGRPC настраивает и запускает gRPC-сервер
+// RunGRPC starts the gRPC server
 func RunGRPC(svc *user.Service) error {
-	// 1. Создаем listener на порту 50051
-	lis, err := net.Listen("tcp", ":50051")
+	// Listen on port 50051
+	listener, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		return fmt.Errorf("failed to listen on port 50051: %w", err)
+		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	// 2. Настраиваем параметры gRPC сервера
-	keepaliveParams := keepalive.ServerParameters{
-		Time:    10 * time.Second, // Отправляем ping каждые 10 секунд
-		Timeout: 5 * time.Second,  // Ждем pong 5 секунд
-	}
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
 
-	// 3. Создаем gRPC сервер с настройками
-	grpcSrv := grpc.NewServer(
-		grpc.KeepaliveParams(keepaliveParams),
-		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             5 * time.Second, // Минимальный интервал между ping'ами
-			PermitWithoutStream: true,            // Разрешаем ping'и без активных стримов
-		}),
-	)
+	// Register UserService
+	userpb.RegisterUserServiceServer(grpcServer, NewHandler(svc))
 
-	// 4. Регистрируем UserService
-	userpb.RegisterUserServiceServer(grpcSrv, NewHandler(svc))
+	log.Println("gRPC server starting on :50051")
+	log.Println("Available methods:")
+	log.Println("  - CreateUser")
+	log.Println("  - GetUser")
+	log.Println("  - UpdateUser")
+	log.Println("  - DeleteUser")
+	log.Println("  - ListUsers")
 
-	// 5. Логируем запуск сервера
-	log.Printf("Starting gRPC server on port 50051...")
-	
-	// 6. Запускаем сервер
-	if err := grpcSrv.Serve(lis); err != nil {
-		return fmt.Errorf("failed to serve gRPC server: %w", err)
+	// Start serving
+	if err := grpcServer.Serve(listener); err != nil {
+		return fmt.Errorf("gRPC server failed: %v", err)
 	}
 
 	return nil
 }
-
-// TODO: Добавить graceful shutdown для корректного завершения работы сервера
-// TODO: Добавить health check endpoint для мониторинга
-// TODO: Добавить метрики и логирование запросов
-// TODO: Добавить TLS конфигурацию для production
-// TODO: Добавить middleware для аутентификации и авторизации

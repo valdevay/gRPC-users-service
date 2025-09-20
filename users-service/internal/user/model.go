@@ -1,18 +1,10 @@
 package user
-import (
-	"time"
-)
 
+// User represents a user in the system
 type User struct {
-	ID        string     `json:"id" gorm:"primaryKey"`
-	Email     string     `json:"email" gorm:"uniqueIndex;not null"`
-	Password  string     `json:"password" gorm:"not null"`
-	CreatedAt time.Time  `json:"-" gorm:"not null;default:CURRENT_TIMESTAMP"`
-	UpdatedAt time.Time  `json:"-" gorm:"not null;default:CURRENT_TIMESTAMP"`
-	DeletedAt *time.Time `json:"-" gorm:"index"`
-}
-
-type UserRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	ID        uint   `json:"id" gorm:"primaryKey"`
+	Email     string `json:"email" gorm:"uniqueIndex;not null"`
+	Password  string `json:"-" gorm:"not null"` // Hidden from JSON
+	CreatedAt int64  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt int64  `json:"updated_at" gorm:"autoUpdateTime"`
 }

@@ -1,51 +1,107 @@
 package user
 
 import (
-	"context"
-	"gorm.io/gorm"
+	"database/sql"
+	"errors"
+	"time"
 )
 
-type UserRepository interface {
-	GetAllUsers(ctx context.Context, limit, offset int) ([]User, error)
-	CreateUser(ctx context.Context, user User) (User, error)
-	UpdateUserByID(ctx context.Context, id string, user User) (User, error)
-	DeleteUserByID(ctx context.Context, id string) error
-	GetUserByID(ctx context.Context, id string) (User, error)
+type Repository struct {
+	db *sql.DB
 }
 
-type UserRepo struct {
-	db *gorm.DB
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{db: db}
 }
 
-func NewRepository(db *gorm.DB) UserRepository {
-	return &UserRepo{db: db}
-}
-
-func (r *UserRepo) GetAllUsers(ctx context.Context, limit, offset int) ([]User, error) {
-	var users []User
-	err := r.db.WithContext(ctx).Limit(limit).Offset(offset).Find(&users).Error
-	return users, err
-}
-
-func (r *UserRepo) CreateUser(ctx context.Context, user User) (User, error) {
-	err := r.db.WithContext(ctx).Create(&user).Error
-	return user, err
-}
-
-func (r *UserRepo) UpdateUserByID(ctx context.Context, id string, user User) (User, error) {
-	err := r.db.WithContext(ctx).Where("id = ?", id).Updates(&user).Error
+func (r *Repository) CreateUser(user *User) error {
+	query := `INSERT INTO users (email, password, created_at, updated_at) VALUES ($1, $2, $3, $4) RETURNING id`
+	now := time.Now().Unix()
+	err := r.db.QueryRow(query, user.Email, user.Password, now, now).Scan(&user.ID)
 	if err != nil {
-		return User{}, err
+		return err
 	}
-	return r.GetUserByID(ctx, id)
+	user.CreatedAt = now
+	user.UpdatedAt = now
+	return nil
 }
 
-func (r *UserRepo) DeleteUserByID(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&User{}, "id = ?", id).Error
+func (r *Repository) GetUserByID(id uint) (*User, error) {
+	query := `SELECT id, email, password, created_at, updated_at FROM users WHERE id = $1`
+	user := &User{}
+	err := r.db.QueryRow(query, id).Scan(&user.ID, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+	return user, nil
 }
 
-func (r *UserRepo) GetUserByID(ctx context.Context, id string) (User, error) {
-	var user User
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
-	return user, err
+func (r *Repository) GetUserByEmail(email string) (*User, error) {
+	query := `SELECT id, email, password, created_at, updated_at FROM users WHERE email = $1`
+	user := &User{}
+	err := r.db.QueryRow(query, email).Scan(&user.ID, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *Repository) GetAllUsers() ([]User, error) {
+	query := `SELECT id, email, password, created_at, updated_at FROM users ORDER BY id`
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var user User
+		err := rows.Scan(&user.ID, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, nil
+}
+
+func (r *Repository) UpdateUser(user *User) error {
+	query := `UPDATE users SET email = $1, password = $2, updated_at = $3 WHERE id = $4`
+	now := time.Now().Unix()
+	result, err := r.db.Exec(query, user.Email, user.Password, now, user.ID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.New("user not found")
+	}
+	user.UpdatedAt = now
+	return nil
+}
+
+func (r *Repository) DeleteUser(id uint) error {
+	query := `DELETE FROM users WHERE id = $1`
+	result, err := r.db.Exec(query, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }
