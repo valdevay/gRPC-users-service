@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/lib/pq v1.10.9
 	github.com/valdevay/project-protos/proto/user v0.0.0-20250920093402-2c9101f76417
+	github.com/valdevay/project-protos/proto/users v0.0.0-20250918103921-0481ab8d9c16
 	google.golang.org/grpc v1.75.1
 )
 
@@ -15,5 +16,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
-
-replace github.com/valdevay/project-protos => ../../project-protos
